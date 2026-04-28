@@ -1,5 +1,4 @@
-# RAG_based_AI_Teaching_Assistant
-An intelligent teaching assistant powered by Retrieval-Augmented Generation (RAG) that combines large language models with contextual knowledge retrieval to deliver accurate, personalized, and explainable learning support.
+ RAG_based_AI_Teaching_Assistant - An intelligent teaching assistant powered by Retrieval-Augmented Generation (RAG) that combines large language models with contextual knowledge retrieval to deliver accurate, personalized, and explainable learning support.
 
 This project leverages modern NLP techniques to answer questions, generate explanations, and assist learners by grounding responses in relevant documents, ensuring both reliability and depth in educational interactions.
 # How to use this RAG AI Teaching Assistant on your own data
