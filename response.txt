@@ -1,0 +1,5 @@
+You're looking for information on semantic tags in HTML. In your Sigma Web Development Course, we cover this topic in Video 11, which is titled "Semantic Tags in HTML".
+
+In Video 11, you'll learn about what semantic tags are and how they can improve the structure and accessibility of your web pages. The instructor explains this concept from start to finish at approximately 4:16 seconds into the video.
+
+If you're interested in learning more about semantic tags, I recommend checking out Video 11 for a detailed explanation.
