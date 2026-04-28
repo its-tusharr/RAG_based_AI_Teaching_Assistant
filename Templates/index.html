@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Sigma RAG Assistant</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Playfair+Display:wght@700;900&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:       #0f0e17;
+    --surface:  #16152a;
+    --card:     #1c1a33;
+    --border:   #2e2b4a;
+    --accent:   #f6a623;
+    --accent2:  #ff6b6b;
+    --glow:     rgba(246,166,35,0.15);
+    --muted:    #4a4770;
+    --text:     #f0edff;
+    --sub:      #7d7a9e;
+    --radius:   12px;
+    --mono:     'DM Mono', monospace;
+    --serif:    'Playfair Display', Georgia, serif;
+    --sans:     'DM Sans', sans-serif;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    height: 100dvh;
+    display: grid;
+    grid-template-columns: 290px 1fr;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* Background texture */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 60% 50% at 15% 50%, rgba(246,166,35,0.06) 0%, transparent 70%),
+      radial-gradient(ellipse 50% 60% at 85% 20%, rgba(255,107,107,0.05) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── Sidebar ── */
+  aside {
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    padding: 28px 22px;
+    gap: 22px;
+    overflow-y: auto;
+    position: relative;
+    z-index: 1;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .logo-icon {
+    width: 42px; height: 42px;
+    background: linear-gradient(135deg, var(--accent), #f97316);
+    border-radius: 10px;
+    display: grid; place-items: center;
+    font-size: 20px;
+    flex-shrink: 0;
+    box-shadow: 0 4px 20px rgba(246,166,35,0.3);
+  }
+  .logo-text {
+    font-family: var(--serif);
+    font-size: 17px;
+    font-weight: 900;
+    letter-spacing: -0.3px;
+    color: var(--text);
+  }
+  .logo-sub {
+    font-size: 10px;
+    color: var(--sub);
+    font-family: var(--mono);
+    letter-spacing: .8px;
+    margin-top: 2px;
+  }
+
+  .divider {
+    height: 1px;
+    background: linear-gradient(90deg, var(--accent) 0%, transparent 100%);
+    opacity: 0.25;
+  }
+
+  .sidebar-label {
+    font-size: 9px;
+    font-family: var(--mono);
+    color: var(--accent);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    opacity: 0.8;
+  }
+
+  /* Pipeline steps */
+  .pipeline { display: flex; flex-direction: column; gap: 0; position: relative; }
+  .pipeline::before {
+    content: '';
+    position: absolute;
+    left: 17px;
+    top: 28px;
+    bottom: 28px;
+    width: 1px;
+    background: linear-gradient(to bottom, var(--accent), var(--accent2));
+    opacity: 0.3;
+  }
+  .step {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 4px;
+    font-size: 12px;
+    position: relative;
+  }
+  .step-num {
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    background: var(--card);
+    border: 1.5px solid var(--accent);
+    color: var(--accent);
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 500;
+    display: grid; place-items: center;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 1;
+  }
+  .step:last-child .step-num { border-color: var(--accent2); color: var(--accent2); }
+  .step-title { font-weight: 600; font-size: 12px; color: var(--text); }
+  .step-detail { color: var(--sub); font-size: 10px; font-family: var(--mono); margin-top: 1px; }
+
+  /* Source chunks */
+  #sources-panel { display: flex; flex-direction: column; gap: 10px; flex: 1; min-height: 0; overflow-y: auto; }
+  #sources-panel:empty::after {
+    content: 'Retrieved context chunks will appear here.';
+    font-size: 11px;
+    color: var(--muted);
+    font-family: var(--mono);
+    line-height: 1.7;
+  }
+  #sources-panel::-webkit-scrollbar { width: 4px; }
+  #sources-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .chunk-card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px;
+    background: var(--card);
+    animation: fadeUp .3s ease;
+    border-left: 2px solid var(--accent);
+    transition: border-color .2s;
+  }
+  .chunk-card:hover { border-left-color: var(--accent2); }
+  .chunk-meta {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    margin-bottom: 5px; flex-wrap: wrap; gap: 4px;
+  }
+  .chunk-title {
+    font-size: 11px; font-weight: 600;
+    color: var(--accent);
+    line-height: 1.3;
+  }
+  .chunk-badge {
+    font-family: var(--mono);
+    font-size: 9px;
+    background: rgba(246,166,35,0.1);
+    color: var(--accent);
+    border: 1px solid rgba(246,166,35,0.3);
+    padding: 2px 7px;
+    border-radius: 20px;
+    white-space: nowrap;
+  }
+  .chunk-time {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--sub);
+    margin-bottom: 6px;
+  }
+  .chunk-time span { color: var(--accent2); }
+  .chunk-text {
+    font-size: 10.5px;
+    color: var(--sub);
+    line-height: 1.55;
+    font-family: var(--mono);
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* ── Main ── */
+  main {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+    z-index: 1;
+  }
+
+  header {
+    padding: 20px 30px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+    background: rgba(15,14,23,0.8);
+    backdrop-filter: blur(12px);
+  }
+  .header-title {
+    font-family: var(--serif);
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -.3px;
+    background: linear-gradient(90deg, var(--text) 60%, var(--accent));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .header-sub { font-size: 11px; color: var(--sub); font-family: var(--mono); margin-top: 3px; }
+  .header-right { display: flex; align-items: center; gap: 10px; }
+  .status-pill {
+    display: flex; align-items: center; gap: 6px;
+    padding: 5px 12px;
+    background: rgba(246,166,35,0.08);
+    border: 1px solid rgba(246,166,35,0.25);
+    border-radius: 20px;
+  }
+  .status-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent);
+    animation: pulse 2s infinite;
+  }
+  .status-label { font-size: 10px; font-family: var(--mono); color: var(--accent); }
+
+  /* Chat */
+  #chat {
+    flex: 1;
+    overflow-y: auto;
+    padding: 30px;
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+    scroll-behavior: smooth;
+  }
+  #chat::-webkit-scrollbar { width: 5px; }
+  #chat::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .msg { display: flex; gap: 13px; animation: fadeUp .28s ease; max-width: 100%; }
+  .msg.user { flex-direction: row-reverse; }
+
+  .avatar {
+    width: 36px; height: 36px; border-radius: 10px;
+    flex-shrink: 0;
+    display: grid; place-items: center;
+    font-size: 16px;
+    border: 1px solid var(--border);
+  }
+  .avatar.ai  { background: rgba(246,166,35,0.1); border-color: rgba(246,166,35,0.2); }
+  .avatar.usr { background: rgba(255,107,107,0.1); border-color: rgba(255,107,107,0.2); }
+
+  .bubble {
+    max-width: 66%;
+    padding: 15px 20px;
+    border-radius: 16px;
+    font-size: 14px;
+    line-height: 1.7;
+    border: 1px solid var(--border);
+  }
+  .msg.user .bubble {
+    background: linear-gradient(135deg, rgba(255,107,107,0.08), rgba(246,166,35,0.06));
+    border-color: rgba(255,107,107,0.2);
+    border-bottom-right-radius: 4px;
+    font-family: var(--sans);
+  }
+  .msg.ai .bubble {
+    background: var(--card);
+    border-bottom-left-radius: 4px;
+  }
+
+  /* Typing */
+  .typing { display: flex; gap: 5px; padding: 4px 2px; align-items: center; }
+  .typing span {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--accent);
+    opacity: 0.4;
+    animation: blink 1.2s infinite;
+  }
+  .typing span:nth-child(2) { animation-delay: .2s; }
+  .typing span:nth-child(3) { animation-delay: .4s; }
+
+  /* Empty state */
+  .empty-state {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    text-align: center;
+    pointer-events: none;
+  }
+  .empty-icon {
+    width: 72px; height: 72px;
+    background: linear-gradient(135deg, rgba(246,166,35,0.15), rgba(255,107,107,0.1));
+    border: 1px solid rgba(246,166,35,0.2);
+    border-radius: 20px;
+    display: grid; place-items: center;
+    font-size: 34px;
+  }
+  .empty-state h2 {
+    font-family: var(--serif);
+    font-size: 22px;
+    font-weight: 900;
+    letter-spacing: -.3px;
+  }
+  .empty-state p { color: var(--sub); font-size: 13px; max-width: 320px; line-height: 1.65; }
+  .suggestions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; pointer-events: all; margin-top: 4px; }
+  .suggestion {
+    padding: 8px 16px;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    font-size: 12px;
+    color: var(--sub);
+    cursor: pointer;
+    background: var(--card);
+    transition: all .2s;
+    font-family: var(--sans);
+  }
+  .suggestion:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(246,166,35,0.06);
+    transform: translateY(-1px);
+  }
+
+  /* Input bar */
+  .input-bar {
+    padding: 18px 30px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 10px;
+    flex-shrink: 0;
+    background: rgba(22,21,42,0.95);
+    backdrop-filter: blur(12px);
+    position: relative;
+  }
+  .input-bar::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 30px; right: 30px; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    opacity: 0.2;
+  }
+
+  #question {
+    flex: 1;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 13px 18px;
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    outline: none;
+    transition: border-color .2s, box-shadow .2s;
+    resize: none;
+    min-height: 48px;
+    max-height: 120px;
+  }
+  #question:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(246,166,35,0.08);
+  }
+  #question::placeholder { color: var(--muted); }
+
+  #send-btn {
+    padding: 13px 22px;
+    background: linear-gradient(135deg, var(--accent), #f97316);
+    color: #0f0e17;
+    border: none;
+    border-radius: var(--radius);
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all .2s;
+    display: flex; align-items: center; gap: 7px;
+    white-space: nowrap;
+    box-shadow: 0 4px 16px rgba(246,166,35,0.25);
+    letter-spacing: 0.3px;
+  }
+  #send-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(246,166,35,0.35); }
+  #send-btn:active { transform: scale(.97) translateY(0); }
+  #send-btn:disabled { opacity: .4; cursor: not-allowed; transform: none; box-shadow: none; }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes blink {
+    0%, 80%, 100% { opacity: .2; }
+    40%            { opacity: 1; }
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: .35; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<aside>
+  <div class="logo">
+    <div class="logo-icon">⚡</div>
+    <div>
+      <div class="logo-text">Sigma RAG</div>
+      <div class="logo-sub">Teaching Assistant</div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="sidebar-label">RAG Pipeline</div>
+  <div class="pipeline">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-info">
+        <div class="step-title">Embed Query</div>
+        <div class="step-detail">bge-m3 · Ollama</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-info">
+        <div class="step-title">Vector Search</div>
+        <div class="step-detail">cosine similarity · top-3</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-info">
+        <div class="step-title">Augment Prompt</div>
+        <div class="step-detail">chunks + metadata</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-info">
+        <div class="step-title">LLM Generate</div>
+        <div class="step-detail">llama3.2:3b · Ollama</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="sidebar-label">Retrieved Chunks</div>
+  <div id="sources-panel"></div>
+</aside>
+
+<!-- Main -->
+<main>
+  <header>
+    <div>
+      <div class="header-title">Sigma Web Dev · AI Assistant</div>
+      <div class="header-sub">Ask anything from the course</div>
+    </div>
+    <div class="status-pill">
+      <div class="status-dot"></div>
+      <span class="status-label">online</span>
+    </div>
+  </header>
+
+  <div id="chat">
+    <div class="empty-state" id="empty">
+      <div class="empty-icon">🎓</div>
+      <h2>What do you want to learn?</h2>
+      <p>Ask any question about the Sigma Web Development Course and I'll find the exact video + timestamp for you.</p>
+      <div class="suggestions">
+        <div class="suggestion" onclick="fillQ(this)">What are semantic tags?</div>
+        <div class="suggestion" onclick="fillQ(this)">How does Flexbox work?</div>
+        <div class="suggestion" onclick="fillQ(this)">Explain CSS Grid</div>
+        <div class="suggestion" onclick="fillQ(this)">What is the box model?</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="input-bar">
+    <textarea id="question" rows="1" placeholder="Ask about any topic in the course…"></textarea>
+    <button id="send-btn" onclick="sendQuery()">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+      Ask
+    </button>
+  </div>
+</main>
+
+<script>
+  const chat     = document.getElementById('chat');
+  const input    = document.getElementById('question');
+  const btn      = document.getElementById('send-btn');
+  const srcPanel = document.getElementById('sources-panel');
+  const empty    = document.getElementById('empty');
+
+  input.addEventListener('input', () => {
+    input.style.height = 'auto';
+    input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+  });
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendQuery(); }
+  });
+
+  function fillQ(el) { input.value = el.textContent; input.focus(); }
+
+  function appendMsg(role, content) {
+    empty?.remove();
+    const div = document.createElement('div');
+    div.className = `msg ${role}`;
+    div.innerHTML = `
+      <div class="avatar ${role === 'user' ? 'usr' : 'ai'}">${role === 'user' ? '👤' : '🤖'}</div>
+      <div class="bubble">${content}</div>`;
+    chat.appendChild(div);
+    chat.scrollTop = chat.scrollHeight;
+    return div;
+  }
+
+  function showTyping() {
+    const div = document.createElement('div');
+    div.className = 'msg ai'; div.id = 'typing';
+    div.innerHTML = `<div class="avatar ai">🤖</div>
+      <div class="bubble"><div class="typing"><span></span><span></span><span></span></div></div>`;
+    chat.appendChild(div);
+    chat.scrollTop = chat.scrollHeight;
+  }
+
+  function renderSources(sources) {
+    srcPanel.innerHTML = '';
+    sources.forEach(s => {
+      const c = document.createElement('div');
+      c.className = 'chunk-card';
+      c.innerHTML = `
+        <div class="chunk-meta">
+          <div class="chunk-title">${s.title}</div>
+          <div class="chunk-badge">Vid #${s.video_no}</div>
+        </div>
+        <div class="chunk-time">⏱ <span>${s.start_time}</span> → <span>${s.end_time}</span></div>
+        <div class="chunk-text">"${s.text.trim()}"</div>`;
+      srcPanel.appendChild(c);
+    });
+  }
+
+  async function sendQuery() {
+    const q = input.value.trim();
+    if (!q) return;
+    input.value = ''; input.style.height = 'auto'; btn.disabled = true;
+    appendMsg('user', q); showTyping();
+    try {
+      const res  = await fetch('/ask', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: q })
+      });
+      const data = await res.json();
+      document.getElementById('typing')?.remove();
+      appendMsg('ai', data.answer.replace(/\n/g, '<br>'));
+      renderSources(data.sources);
+    } catch {
+      document.getElementById('typing')?.remove();
+      appendMsg('ai', '⚠️ Could not reach the server. Make sure Ollama is running.');
+    } finally {
+      btn.disabled = false; input.focus();
+    }
+  }
+</script>
+</body>
+</html>
